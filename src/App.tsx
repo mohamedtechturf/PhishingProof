@@ -11,7 +11,9 @@ import {
   FileWarning,
   Link2,
   LockKeyhole,
+  Maximize2,
   Mail,
+  Minimize2,
   Menu,
   Moon,
   Paperclip,
@@ -339,6 +341,8 @@ const TechniquesSection = ({ language }: { language: Language }) => {
 
 const QuizSection = ({ language, quizMode, quizSet, currentIndex, answers, score, onStart, onAnswer, onNext, onRetry, onBackToLearn }: { language: Language; quizMode: QuizMode; quizSet: QuizQuestion[]; currentIndex: number; answers: Record<string, boolean>; score: number; onStart: () => void; onAnswer: (value: boolean) => void; onNext: () => void; onRetry: () => void; onBackToLearn: () => void }) => {
   const copy = translations[language];
+  const [simulationExpanded, setSimulationExpanded] = useState(false);
+  const [simulationClosing, setSimulationClosing] = useState(false);
   const current = quizSet[currentIndex];
   const answered = current ? Object.prototype.hasOwnProperty.call(answers, current.id) : false;
   const userAnswer = current ? answers[current.id] : undefined;
@@ -347,9 +351,41 @@ const QuizSection = ({ language, quizMode, quizSet, currentIndex, answers, score
   const categoryLabels: Record<string, string> = { categoryUrl: copy.categoryUrl, categoryUrgency: copy.categoryUrgency, categoryAttachment: copy.categoryAttachment, categoryIdentity: copy.categoryIdentity, categoryContext: copy.categoryContext };
   const missedCategories = [...new Set(incorrectCategories)].map((category) => categoryLabels[category]).filter(Boolean);
   const rating = score >= 8 ? copy.ratingExcellent : score >= 5 ? copy.ratingGood : copy.ratingPractice;
+
+  useEffect(() => {
+    if (!simulationExpanded) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setSimulationClosing(true);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [simulationExpanded]);
+
+  useEffect(() => {
+    if (!simulationClosing) return;
+    const closeTimer = window.setTimeout(() => {
+      setSimulationExpanded(false);
+      setSimulationClosing(false);
+    }, 320);
+    return () => window.clearTimeout(closeTimer);
+  }, [simulationClosing]);
+
+  useEffect(() => {
+    if (quizMode !== 'playing') {
+      setSimulationExpanded(false);
+      setSimulationClosing(false);
+    }
+  }, [quizMode]);
+
   return (
-    <section className="section section-quiz" id="quiz">
+    <section className={`section section-quiz ${simulationExpanded ? 'is-expanded' : ''} ${simulationClosing ? 'is-closing' : ''}`} id="quiz" role={simulationExpanded ? 'dialog' : undefined} aria-modal={simulationExpanded || undefined} aria-label={simulationExpanded ? (language === 'ar' ? 'اختبار المحاكاة' : 'Simulation quiz') : undefined}>
       <SectionHeading eyebrow={copy.quizEyebrow} title={copy.quizTitle} text={copy.quizText} accent="green" />
+      {quizMode === 'playing' && <div className="quiz-size-control"><button className="quiz-size-toggle" type="button" aria-label={simulationExpanded ? (language === 'ar' ? 'تصغير المحاكاة' : 'Make simulation smaller') : (language === 'ar' ? 'تكبير المحاكاة' : 'Make simulation bigger')} aria-pressed={simulationExpanded} onClick={() => { if (simulationExpanded) setSimulationClosing(true); else setSimulationExpanded(true); }}>{simulationExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}<span>{simulationExpanded ? (language === 'ar' ? 'تصغير المحاكاة' : 'Smaller simulation') : (language === 'ar' ? 'تكبير المحاكاة' : 'Bigger simulation')}</span></button></div>}
       {quizMode === 'intro' && <div className="quiz-intro"><div className="quiz-intro-visual"><div className="quiz-target"><CircleHelp size={42} /><span>10</span></div><div className="quiz-mini-stat"><strong>05 / 05</strong><span>{language === 'ar' ? 'تقريباً شرعي / تصيد' : 'Approx. legit / phish'}</span></div></div><div className="quiz-intro-copy"><span className="eyebrow">{copy.chooseAnswer}</span><h3>{language === 'ar' ? 'افحص البريد، ثم اتخذ قراراً هادئاً.' : 'Inspect the inbox, then make a calm call.'}</h3><p>{language === 'ar' ? 'كل جولة تعرض رسالة محاكاة. بعد إجابتك سترى سبب التصنيف والدرس الذي يستحق الاحتفاظ به.' : 'Each round shows a simulated email. After your answer, you will see the reasoning and the lesson worth keeping.'}</p><button className="button button-primary" type="button" onClick={onStart}>{copy.startQuiz}<ArrowUpRight size={17} /></button></div></div>}
       {quizMode === 'playing' && current && <div className="quiz-play"><div className="quiz-progress-row"><div><span>{copy.question} {currentIndex + 1} / {quizSet.length}</span><div className="progress-track"><div className="progress-fill" style={{ width: `${((currentIndex + (answered ? 1 : 0)) / quizSet.length) * 100}%` }} /></div></div><div className="score-badge"><Trophy size={16} /><span>{copy.score}</span><strong>{score}</strong></div></div><div className="quiz-email-heading"><span className="eyebrow">{copy.chooseAnswer}</span><h3>{getLocalized(current.subject, language)}</h3></div><EmailCard email={current} language={language} reviewState={answered} isPhishing={current.isPhishing} compact />{answered && <div className={`feedback-card ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}`}><div className="feedback-title"><span className="feedback-icon">{isCorrect ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}</span><strong>{isCorrect ? copy.correct : copy.incorrect}</strong><span className="answer-chip">{current.isPhishing ? copy.phishing : copy.legit}</span></div><div className="feedback-columns"><div><span className="feedback-label">{copy.explanation}</span><p>{getLocalized(current.explanation, language)}</p></div><div><span className="feedback-label">{current.isPhishing ? copy.redFlags : copy.legitimacy}</span><StatusList items={current.flags} language={language} positive={!current.isPhishing} /></div></div><div className="lesson-box"><LightbulbIcon /><div><strong>{copy.keyLesson}</strong><p>{getLocalized(current.lesson, language)}</p></div></div><button className="button button-primary feedback-next" type="button" onClick={onNext}>{currentIndex === quizSet.length - 1 ? copy.quizComplete : copy.nextQuestion}<ArrowUpRight size={17} /></button></div>}{!answered && <div className="answer-actions"><span>{copy.chooseAnswer}</span><div><button className="answer-button phishing-button" type="button" onClick={() => onAnswer(true)}><AlertTriangle size={19} />{copy.phishing}</button><button className="answer-button legit-button" type="button" onClick={() => onAnswer(false)}><CheckCircle2 size={19} />{copy.legit}</button></div></div>}</div>}
       {quizMode === 'complete' && <div className="quiz-results"><div className="results-hero"><div className="trophy-ring"><Trophy size={32} /></div><span className="eyebrow">{copy.quizComplete}</span><h3>{copy.yourScore} <strong>{score}<small> / {quizSet.length}</small></strong></h3><p>{rating}</p></div><div className="results-grid"><div className="review-panel"><div className="panel-title"><span>{copy.review}</span><span>{score} / {quizSet.length}</span></div><div className="review-list">{quizSet.map((question, index) => { const correct = answers[question.id] === question.isPhishing; return <div className={`review-item ${correct ? 'review-correct' : 'review-wrong'}`} key={question.id}><span className="review-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{getLocalized(question.subject, language)}</strong><span>{copy.yourAnswer}: {answers[question.id] ? copy.phishing : copy.legit} · {copy.correctAnswer}: {question.isPhishing ? copy.phishing : copy.legit}</span></div><span className="review-status">{correct ? <Check size={15} /> : <X size={15} />}</span></div>; })}</div></div><div className="weak-panel"><div className="panel-title"><span>{copy.missedSkills}</span><FileWarning size={17} /></div>{missedCategories.length > 0 ? <ul>{missedCategories.map((category) => <li key={category}><span />{category}</li>)}</ul> : <div className="all-clear"><CheckCircle2 size={22} /><p>{copy.noMissedSkills}</p></div>}<div className="results-actions"><button className="button button-primary" type="button" onClick={onRetry}><RotateCcw size={17} />{copy.retry}</button><button className="button button-ghost" type="button" onClick={onBackToLearn}>{copy.backToLearn}<ArrowUpRight size={17} /></button></div></div></div></div>}
